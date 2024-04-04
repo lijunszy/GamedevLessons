@@ -24,37 +24,39 @@ struct light
 
 layout(set = 0, binding = 1) uniform uniformbuffer
 {
-	mat4 shadowmap_space;
-	mat4 local_to_world;
-	vec4 camera_info;
-	light directional_lights[4];
-	light point_lights[4];
-	light spot_lights[4];
-	ivec4 lights_count; // [0] for directional_lights, [1] for point_lights, [2] for spot_lights
+	mat4 shadowmapSpace;
+	mat4 localToWorld;
+	vec4 cameraInfo;
+	light directionalLights[16];
+	light pointLights[512];
+	light spotLights[16];
+	ivec4 lightsCount; // [0] for directionalLights, [1] for pointLights, [2] for spotLights
 	float zNear;
 	float zFar;
 } view;
 
-uint DIRECTIONAL_LIGHTS = view.lights_count[0];
-// uint POINT_LIGHTS = view.lights_count[1];
-// uint SPOT_LIGHTS = view.lights_count[2];
-uint SKY_MAXMIPS = view.lights_count[3];
+uint DIRECTIONAL_LIGHTS = view.lightsCount[0];
+// uint POINT_LIGHTS = view.lightsCount[1];
+// uint SPOT_LIGHTS = view.lightsCount[2];
+uint SKY_MAXMIPS = view.lightsCount[3];
 
-layout(set = 0, binding = 2) uniform samplerCube skycubemap;  // sky cubemap
-layout(set = 0, binding = 3) uniform sampler2D shadowmap;  // sky cubemap
-layout(set = 0, binding = 4) uniform sampler2D sampler1; // basecolor
-layout(set = 0, binding = 5) uniform sampler2D sampler2; // metalic
-layout(set = 0, binding = 6) uniform sampler2D sampler3; // roughness
-layout(set = 0, binding = 7) uniform sampler2D sampler4; // normalmap
-layout(set = 0, binding = 8) uniform sampler2D sampler5; // ambient occlution
+layout(set = 0, binding = 2)  uniform samplerCube skycubemap;  // sky cubemap
+layout(set = 0, binding = 3)  uniform sampler2D shadowmap;  // sky cubemap
+layout(set = 0, binding = 4)  uniform sampler2D sampler1; // basecolor
+layout(set = 0, binding = 5)  uniform sampler2D sampler2; // metalic
+layout(set = 0, binding = 6)  uniform sampler2D sampler3; // roughness
+layout(set = 0, binding = 7)  uniform sampler2D sampler4; // normalmap
+layout(set = 0, binding = 8)  uniform sampler2D sampler5; // ambient occlution
+layout(set = 0, binding = 9)  uniform sampler2D sampler6; // emissive
+layout(set = 0, binding = 10) uniform sampler2D sampler7; // mask
 
 layout(location = 0) in vec3 fragPosition;
-layout(location = 1) in vec3 fragPositionWS;
-layout(location = 2) in vec3 fragNormal;
-layout(location = 3) in vec3 fragColor;
-layout(location = 4) in vec2 fragTexCoord;
+layout(location = 1) in vec3 fragNormal;
+layout(location = 2) in vec3 fragColor;
+layout(location = 3) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 outColor;
+
 
 const float PI = 3.14159265359;
 vec3 F0 = vec3(0.04);
@@ -138,8 +140,8 @@ float D_GGX(float NdotH, float roughness)
 
 vec3 ComputeNormal()
 {
-	vec3 pos_dx = dFdx(fragPositionWS);
-	vec3 pos_dy = dFdy(fragPositionWS);
+	vec3 pos_dx = dFdx(fragPosition);
+	vec3 pos_dy = dFdy(fragPosition);
 	vec3 st1    = dFdx(vec3(fragTexCoord, 0.0));
 	vec3 st2    = dFdy(vec3(fragTexCoord, 0.0));
 	vec3 T      = (st2.t * pos_dx - st1.t * pos_dy) / (st1.s * st2.t - st2.s * st1.t);
@@ -154,8 +156,8 @@ vec3 ComputeNormal()
 
 vec3 ComputeNormal(vec3 n)
 {
-	vec3 pos_dx = dFdx(fragPositionWS);
-	vec3 pos_dy = dFdy(fragPositionWS);
+	vec3 pos_dx = dFdx(fragPosition);
+	vec3 pos_dy = dFdy(fragPosition);
 	vec3 st1    = dFdx(vec3(fragTexCoord, 0.0));
 	vec3 st2    = dFdy(vec3(fragTexCoord, 0.0));
 	vec3 T      = (st2.t * pos_dx - st1.t * pos_dy) / (st1.s * st2.t - st2.s * st1.t);
@@ -170,19 +172,19 @@ vec3 ComputeNormal(vec3 n)
 
 vec3 GetDirectionalLightDirection(uint index)
 {
-	return normalize(view.directional_lights[index].direction.xyz);
+	return normalize(view.directionalLights[index].direction.xyz);
 }
 
 
 vec3 GetDirectionalLightColor(uint index)
 {
-	return view.directional_lights[index].color.rgb;
+	return view.directionalLights[index].color.rgb;
 }
 
 
 float GetDirectionalLightIntensity(uint index)
 {
-	return saturate(view.directional_lights[index].color.w);
+	return saturate(view.directionalLights[index].color.w);
 }
 
 
@@ -261,9 +263,9 @@ const mat4 BiasMat = mat4(
 	0.5, 0.5, 0.0, 1.0 );
 
 
-vec4 ComputeShadowCoord()
+vec4 ComputeShadowCoord(vec3 Position)
 {
-	return ( BiasMat * view.shadowmap_space * view.local_to_world) * vec4(fragPosition, 1.0);
+	return BiasMat * view.shadowmapSpace * vec4(Position, 1.0);
 }
 
 
@@ -318,10 +320,11 @@ void main()
 	Roughness = max(0.01, Roughness);
 	float AO = AmbientOcclution.r;
 	vec3 N = Normal;
-	vec3 V = normalize(view.camera_info.xyz - fragPositionWS);
+	vec3 P = fragPosition;
+	vec3 V = normalize(view.cameraInfo.xyz - P);
 	float NdotV = saturate(dot(N, V));
 
-	// Direct Lighting : DisneyDiffuse + SpecularGGX
+	// (1) Direct Lighting : DisneyDiffuse + SpecularGGX
 	vec3 DirectLighting = vec3(0.0);
 	vec3 DiffuseColor = BaseColor.rgb * (1.0 - Metallic);
 	for (uint i = 0u; i < DIRECTIONAL_LIGHTS; ++i)
@@ -350,10 +353,10 @@ void main()
 		DirectLighting += ApplyDirectionalLight(i, N) * (DirectDiffuseColor + DirectSpecularColor);
 	}
 
-	// Indirect Lighting : Simple lambert diffuse as indirect lighting
+	// (2) Indirect Lighting : Simple lambert diffuse as indirect lighting
 	vec3 IndirectLighting = BaseColor.rgb / PI * AO;
 
-	// Reflection Specular : Image based lighting
+	// (3) Reflection Specular : Image based lighting
 	vec3 Specular = ComputeF0(0.5, BaseColor, Metallic);
 	vec3 ReflectionBRDF = EnvBRDFApprox(Specular, Roughness, NdotV);
 	float ratio = 1.00 / 1.52;
@@ -367,12 +370,12 @@ void main()
 	float ShadowFactor = 1.0;
 	if (SPEC_CONSTANTS == 8)
 	{
-		vec4 ShadowCoord = ComputeShadowCoord();
+		vec4 ShadowCoord = ComputeShadowCoord(P);
 		ShadowFactor = ShadowDepthProject(ShadowCoord / ShadowCoord.w, vec2(0.0));
 	}
 	if (SPEC_CONSTANTS == 0 || SPEC_CONSTANTS == 9)
 	{
-		vec4 ShadowCoord = ComputeShadowCoord();
+		vec4 ShadowCoord = ComputeShadowCoord(P);
 		ShadowFactor = ComputePCF(ShadowCoord / ShadowCoord.w, 2);
 	}
 
@@ -396,7 +399,8 @@ void main()
 		case 6:
 			outColor = vec4(vec3(VertexColor), 1.0); break;
 		case 7:
-			outColor = vec4(vec3(FinalColor), 1.0); break;
+			vec3 cubemap = textureLod(skycubemap, R, 0).rgb * 10.0;
+			outColor = vec4(vec3(cubemap), 1.0); break;
 		case 8:
 		case 9:
 			outColor = vec4(vec3(ShadowFactor), 1.0); break;

@@ -998,8 +998,9 @@ protected:
 		VkInstanceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
-        createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-        
+#ifdef __APPLE__
+		createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 		// 获取需要的glfw拓展名
 		uint32_t glfwExtensionCount = 0;
 		const char** glfwExtensions;
@@ -1011,12 +1012,13 @@ protected:
 		{
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
-        // Fix issue on Mac(m2) "vkCreateInstance: Found no drivers!"
-        extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-        // Issue on Mac(m2), it's not a error, but a warning, ignore it by this time~
-        // vkCreateDevice():  VK_KHR_portability_subset must be enabled because physical device VkPhysicalDevice 0x600003764f40[] supports it. The Vulkan spec states: If the VK_KHR_portability_subset extension is included in pProperties of vkEnumerateDeviceExtensionProperties, ppEnabledExtensionNames must include "VK_KHR_portability_subset"
-        extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
+#ifdef __APPLE__
+		// Fix issue on Mac(m2) "vkCreateInstance: Found no drivers!"
+		extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		// Issue on Mac(m2), it's not a error, but a warning, ignore it by this time~
+		// vkCreateDevice():  VK_KHR_portability_subset must be enabled because physical device VkPhysicalDevice 0x600003764f40[] supports it. The Vulkan spec states: If the VK_KHR_portability_subset extension is included in pProperties of vkEnumerateDeviceExtensionProperties, ppEnabledExtensionNames must include "VK_KHR_portability_subset"
+		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+#endif
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 		createInfo.ppEnabledExtensionNames = extensions.data();
 
@@ -1891,7 +1893,16 @@ protected:
 			true/*bDepthTest*/, true/*bCullBack*/, true/*bInstanced*/);
 
 
-		CreateRenderObjectsFromProfabs(BaseScenePass.RenderObjects, "jupiter");
+		FRenderObject jupiter;
+		std::string jupiter_obj = "Resources/Models/jupiter.obj";
+		std::vector<std::string> jupiter_imgs = {
+			"Resources/Textures/jupiter_bc.png",
+			"Resources/Textures/default_black.png",
+			"Resources/Textures/default_white.png",
+			"Resources/Textures/default_normal.png",
+			"Resources/Textures/default_white.png" };
+		CreateRenderObject<FRenderObject>(jupiter, jupiter_obj, jupiter_imgs);
+		BaseScenePass.RenderObjects.push_back(jupiter);
 
 		std::vector<FInstanceData> instanceData;
 		instanceData.resize(INSTANCE_COUNT);
@@ -1914,7 +1925,18 @@ protected:
 			instanceData[i].InstancePScale = RandRange(0, 9999) / 250000.0f;
 			instanceData[i].InstanceTexIndex = RandRange(0, 255);
 		}
-		CreateRenderObjectsFromProfabs(BaseScenePass.RenderInstancedObjects, "antarctic_meteorite", instanceData);
+
+		FRenderInstancedObject antarctic_meteorite;
+		std::string antarctic_meteorite_obj = "Resources/Models/antarctic_meteorite.obj";
+		std::vector<std::string> antarctic_meteorite_imgs = {
+			"Resources/Textures/antarctic_meteorite_bc.png",
+			"Resources/Textures/default_black.png",
+			"Resources/Textures/default_white.png",
+			"Resources/Textures/default_normal.png",
+			"Resources/Textures/default_white.png" };
+		CreateRenderObject<FRenderInstancedObject>(antarctic_meteorite, antarctic_meteorite_obj, antarctic_meteorite_imgs);
+		CreateInstancedBuffer<FRenderInstancedObject>(antarctic_meteorite, instanceData);
+		BaseScenePass.RenderInstancedObjects.push_back(antarctic_meteorite);
 		//~ 结束 创建场景，包括VBO，UBO，贴图等
 	}
 

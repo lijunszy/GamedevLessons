@@ -70,7 +70,7 @@ struct SwapChainSupportDetails
 class DrawTheTriangleApp 
 {
 public:
-    /** 主函数调用接口*/
+	/** 主函数调用接口*/
 	void mainTask()
 	{
 		initWindow();   // 使用传统的GLFW，初始化窗口
@@ -79,105 +79,105 @@ public:
 		destory();      // 渲染窗口关闭时，删除创建的资源
 	}
 
-    /** 初始化GUI渲染窗口*/
-    void initWindow()
-    {
-        glfwInit();
+	/** 初始化GUI渲染窗口*/
+	void initWindow()
+	{
+		glfwInit();
 
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-        window = glfwCreateWindow(WIDTH, HEIGHT, "LearnVulkan-02: Draw the Triangle", nullptr, nullptr);
-    }
+		window = glfwCreateWindow(WIDTH, HEIGHT, "LearnVulkan-02: Draw the Triangle", nullptr, nullptr);
+	}
 
-    /** 初始化Vulkan的渲染管线*/
-    void initVulkan()
-    {
-        createInstance();           // 连接此程序和Vulkan，一般由显卡驱动实现
-        createDebugMessenger();     // 创建调试打印信息
-        createWindowsSurface();     // 连接此程序的窗口和Vulkan，渲染Vulkan输出
-        selectPhysicalDevice();     // 找到此电脑的物理显卡硬件
-        createLogicalDevice();      // 创建逻辑硬件，对应物理硬件
-        createSwapChain();          // 创建交换链，用于渲染数据和图像显示的中间交换
-        createImageViews();         // 创建图像显示，包含在SwapChain中
-        createRenderPass();         // 创建渲染通道
-        createGraphicsPipeline();   // 创建图形渲染管线
-        createFramebuffers();       // 创建帧缓存，包含在SwaoChain中
-        createCommandPool();        // 创建指令池，存储所有的渲染指令
-        createCommandBuffer();      // 创建指令缓存，指令发送前变成指令缓存
-        createSyncObjects();        // 创建同步围栏，确保下一帧渲染前，上一帧全部渲染完成
-    }
+	/** 初始化Vulkan的渲染管线*/
+	void initVulkan()
+	{
+		createInstance();           // 连接此程序和Vulkan，一般由显卡驱动实现
+		createDebugMessenger();     // 创建调试打印信息
+		createWindowsSurface();     // 连接此程序的窗口和Vulkan，渲染Vulkan输出
+		selectPhysicalDevice();     // 找到此电脑的物理显卡硬件
+		createLogicalDevice();      // 创建逻辑硬件，对应物理硬件
+		createSwapChain();          // 创建交换链，用于渲染数据和图像显示的中间交换
+		createImageViews();         // 创建图像显示，包含在SwapChain中
+		createRenderPass();         // 创建渲染通道
+		createGraphicsPipeline();   // 创建图形渲染管线
+		createFramebuffers();       // 创建帧缓存，包含在SwaoChain中
+		createCommandPool();        // 创建指令池，存储所有的渲染指令
+		createCommandBuffer();      // 创建指令缓存，指令发送前变成指令缓存
+		createSyncObjects();        // 创建同步围栏，确保下一帧渲染前，上一帧全部渲染完成
+	}
 
-    /** 主循环，执行每帧渲染*/
-    void mainTick()
-    {
-        while (!glfwWindowShouldClose(window))
-        {
-            glfwPollEvents();
-            drawFrame(); // 绘制一帧
-        }
+	/** 主循环，执行每帧渲染*/
+	void mainTick()
+	{
+		while (!glfwWindowShouldClose(window))
+		{
+			glfwPollEvents();
+			drawFrame(); // 绘制一帧
+		}
 
-        vkDeviceWaitIdle(device);
-    }
+		vkDeviceWaitIdle(device);
+	}
 
-    /** 清除Vulkan的渲染管线*/
-    void destory()
-    {
-        destoryVulkan(); // 删除Vulkan对象
+	/** 清除Vulkan的渲染管线*/
+	void destory()
+	{
+		destoryVulkan(); // 删除Vulkan对象
 
-        glfwDestroyWindow(window);
-        glfwTerminate();
-    }
+		glfwDestroyWindow(window);
+		glfwTerminate();
+	}
 
-     /** 在创建好一切必要资源后，执行绘制操作*/
-    void drawFrame()
-    {
-        /** 等待上一帧绘制完成*/
-        vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-        vkResetFences(device, 1, &inFlightFence);
+	 /** 在创建好一切必要资源后，执行绘制操作*/
+	void drawFrame()
+	{
+		/** 等待上一帧绘制完成*/
+		vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+		vkResetFences(device, 1, &inFlightFence);
 
-        uint32_t imageIndex;
-        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+		uint32_t imageIndex;
+		vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
-        vkResetCommandBuffer(commandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
-        recordCommandBuffer(commandBuffer, imageIndex); // 记录所有的渲染指令缓存
+		vkResetCommandBuffer(commandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
+		recordCommandBuffer(commandBuffer, imageIndex); // 记录所有的渲染指令缓存
 
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
+		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = waitSemaphores;
+		submitInfo.pWaitDstStageMask = waitStages;
 
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
 
-        VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = signalSemaphores;
+		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = signalSemaphores;
 
-        /** 提交渲染指令*/
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to submit draw command buffer!");
-        }
+		/** 提交渲染指令*/
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to submit draw command buffer!");
+		}
 
-        VkPresentInfoKHR presentInfo{};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = signalSemaphores;
 
-        VkSwapchainKHR swapChains[] = { swapChain };
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapChains;
+		VkSwapchainKHR swapChains[] = { swapChain };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = swapChains;
 
-        presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pImageIndices = &imageIndex;
 
-        vkQueuePresentKHR(presentQueue, &presentInfo);
-    }
+		vkQueuePresentKHR(presentQueue, &presentInfo);
+	}
 
 private:
 	GLFWwindow* window;									// Window 渲染桌面
@@ -229,22 +229,28 @@ protected:
 
 		VkInstanceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 		createInfo.pApplicationInfo = &appInfo;
+#ifdef __APPLE__
+		createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+		/** Get Required Extensions*/
+		uint32_t glfwExtensionCount = 0;
+		const char** glfwExtensions;
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-        /** Get Required Extensions*/
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+		std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-        if (enableValidationLayers)
-        {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-        // 修复Mac上"vkCreateInstance: Found no drivers!"的问题
-        extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		if (enableValidationLayers)
+		{
+			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+#ifdef __APPLE__
+		// Fix issue on Mac(m2) "vkCreateInstance: Found no drivers!"
+		extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		// Issue on Mac(m2), it's not a error, but a warning, ignore it by this time~
+		// vkCreateDevice():  VK_KHR_portability_subset must be enabled because physical device VkPhysicalDevice 0x600003764f40[] supports it. The Vulkan spec states: If the VK_KHR_portability_subset extension is included in pProperties of vkEnumerateDeviceExtensionProperties, ppEnabledExtensionNames must include "VK_KHR_portability_subset"
+		extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+#endif
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 		createInfo.ppEnabledExtensionNames = extensions.data();
 
@@ -779,42 +785,42 @@ protected:
 	}
 
 private:
-    /** 删除函数initVulkan中创建的元素*/
-    void destoryVulkan()
-    {
-        vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
-        vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
-        vkDestroyFence(device, inFlightFence, nullptr);
+	/** 删除函数initVulkan中创建的元素*/
+	void destoryVulkan()
+	{
+		vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+		vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+		vkDestroyFence(device, inFlightFence, nullptr);
 
-        vkDestroyCommandPool(device, commandPool, nullptr);
+		vkDestroyCommandPool(device, commandPool, nullptr);
 
-        for (auto framebuffer : swapChainFramebuffers)
-        {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
+		for (auto framebuffer : swapChainFramebuffers)
+		{
+			vkDestroyFramebuffer(device, framebuffer, nullptr);
+		}
 
-        vkDestroyPipeline(device, graphicsPipeline, nullptr);
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-        vkDestroyRenderPass(device, renderPass, nullptr);
+		vkDestroyPipeline(device, graphicsPipeline, nullptr);
+		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+		vkDestroyRenderPass(device, renderPass, nullptr);
 
-        for (auto imageView : swapChainImageViews)
-        {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
+		for (auto imageView : swapChainImageViews)
+		{
+			vkDestroyImageView(device, imageView, nullptr);
+		}
 
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
-        vkDestroyDevice(device, nullptr);
+		vkDestroySwapchainKHR(device, swapChain, nullptr);
+		vkDestroyDevice(device, nullptr);
 
-        if (enableValidationLayers)
-        {
-            destroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-        }
+		if (enableValidationLayers)
+		{
+			destroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+		}
 
-        vkDestroySurfaceKHR(instance, surface, nullptr);
-        vkDestroyInstance(instance, nullptr);
-    }
-    
-    /** 创建Shader模块*/
+		vkDestroySurfaceKHR(instance, surface, nullptr);
+		vkDestroyInstance(instance, nullptr);
+	}
+	
+	/** 创建Shader模块*/
 	VkShaderModule createShaderModule(const std::vector<char>& code) 
 	{
 		VkShaderModuleCreateInfo createInfo{};
@@ -914,24 +920,24 @@ private:
 		return details;
 	}
 
-    /** 检测硬件是否合适*/
+	/** 检测硬件是否合适*/
 	bool isDeviceSuitable(VkPhysicalDevice device) 
 	{
 		QueueFamilyIndices indices = findQueueFamilies(device);
 
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+		uint32_t extensionCount;
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
 
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+		std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
 
-        for (const auto& extension : availableExtensions)
-        {
-            requiredExtensions.erase(extension.extensionName);
-        }
-        
+		for (const auto& extension : availableExtensions)
+		{
+			requiredExtensions.erase(extension.extensionName);
+		}
+		
 		bool extensionsSupported = requiredExtensions.empty();
 
 		bool swapChainAdequate = false;
@@ -984,7 +990,7 @@ private:
 		return indices;
 	}
 
-    /** 检查是否支持合法性检测*/
+	/** 检查是否支持合法性检测*/
 	bool checkValidationLayerSupport() 
 	{
 		uint32_t layerCount;
@@ -1035,8 +1041,8 @@ private:
 
 		return buffer;
 	}
-    
-    /** 打印调试信息时的回调函数，可以用来处理调试信息*/
+	
+	/** 打印调试信息时的回调函数，可以用来处理调试信息*/
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) 
 	{
 		std::cerr << "[LOG]: " << pCallbackData->pMessage << std::endl;
