@@ -1597,61 +1597,6 @@ protected:
 			createDescriptorSets(outObject.descriptorSets, outObject.descriptorPool, baseScenePass.descriptorSetLayout, outObject.textureImageViews, outObject.textureSamplers);
 		};
 
-		auto createProfabs = [this, createRenderResource](const std::string& in_asset_name)
-		{
-			std::string asset_set_dir = "Resources/Profabs";
-			for (const auto& folder : std::filesystem::directory_iterator(asset_set_dir))
-			{
-				std::string asset_name = folder.path().filename().generic_string();
-				std::string asset_set = folder.path().generic_string();
-				std::string models_dir = asset_set + std::string("/models/");
-				std::string textures_dir = asset_set + std::string("/textures/");
-				if (in_asset_name == asset_name &&
-					std::filesystem::is_directory(models_dir) && std::filesystem::is_directory(textures_dir))
-				{
-					for (const auto& model : std::filesystem::directory_iterator(models_dir))
-					{
-						std::string model_file = model.path().generic_string();
-						std::string model_file_name = model_file.substr(model_file.find_last_of("/\\") + 1);
-						std::string::size_type const p(model_file_name.find_last_of('.'));
-						std::string model_name = model_file_name.substr(0, p);
-
-						std::string texture_bc = textures_dir + model_name + std::string("_bc.png");
-						if (!std::filesystem::exists(texture_bc)) {
-							texture_bc = std::string("Resources/Textures/default_grey.png");
-						}
-						std::string texture_m = textures_dir + model_name + std::string("_m.png");
-						if (!std::filesystem::exists(texture_m)) {
-							texture_m = std::string("Resources/Textures/default_black.png");
-						}
-						std::string texture_r = textures_dir + model_name + std::string("_r.png");
-						if (!std::filesystem::exists(texture_r)) {
-							texture_r = std::string("Resources/Textures/default_white.png");
-						}
-						std::string texture_n = textures_dir + model_name + std::string("_n.png");
-						if (!std::filesystem::exists(texture_n)) {
-							texture_n = std::string("Resources/Textures/default_normal.png");
-						}
-						std::string texture_ao = textures_dir + model_name + std::string("_ao.png");
-						if (!std::filesystem::exists(texture_ao)) {
-							texture_ao = std::string("Resources/Textures/default_white.png");
-						}
-
-						FRenderObject asset;
-						std::string asset_obj = model_file;
-						std::vector<std::string> asset_imgs = {
-							texture_bc,
-							texture_m,
-							texture_r,
-							texture_n,
-							texture_ao };
-						createRenderResource(asset, asset_obj, asset_imgs);
-						baseScenePass.renderObjects.push_back(asset);
-					}
-				}
-			}
-		};
-
 		// 创建环境反射纹理资源
 		createCubemapResources();
 

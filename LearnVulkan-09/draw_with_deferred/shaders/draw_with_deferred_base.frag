@@ -36,8 +36,8 @@ layout(set = 0, binding = 1) uniform uniformbuffer
 } view;
 
 uint DIRECTIONAL_LIGHTS = view.lightsCount[0];
-// uint POINT_LIGHTS = view.lightsCount[1];
-// uint SPOT_LIGHTS = view.lightsCount[2];
+uint POINT_LIGHTS = view.lightsCount[1];
+uint SPOT_LIGHTS = view.lightsCount[2];
 uint SKY_MAXMIPS = view.lightsCount[3];
 
 layout(set = 0, binding = 2)  uniform samplerCube skycubemap;  // sky cubemap
@@ -82,6 +82,112 @@ float lerp(float f1, float f2, float a)
 vec3 lerp(vec3 v1, vec3 v2, float a)
 {
 	return ((1.0 - a) * v1 + a * v2);
+}
+
+
+float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
+{
+	value = clamp(value, inputMin, inputMax);
+	return (value - inputMin) / (inputMax - inputMin) * (outputMax - outputMin) + outputMin;
+}
+
+
+vec3 ComputeNormal()
+{
+	vec3 pos_dx = dFdx(fragPosition);
+	vec3 pos_dy = dFdy(fragPosition);
+	vec3 st1    = dFdx(vec3(fragTexCoord, 0.0));
+	vec3 st2    = dFdy(vec3(fragTexCoord, 0.0));
+	vec3 T      = (st2.t * pos_dx - st1.t * pos_dy) / (st1.s * st2.t - st2.s * st1.t);
+	vec3 N      = normalize(fragNormal);
+	T           = normalize(T - N * dot(N, T));
+	vec3 B      = normalize(cross(N, T));
+	mat3 TBN    = mat3(T, B, N);
+	
+	return normalize(TBN[2].xyz);
+}
+
+
+vec3 ComputeNormal(vec3 n)
+{
+	vec3 pos_dx = dFdx(fragPosition);
+	vec3 pos_dy = dFdy(fragPosition);
+	vec3 st1    = dFdx(vec3(fragTexCoord, 0.0));
+	vec3 st2    = dFdy(vec3(fragTexCoord, 0.0));
+	vec3 T      = (st2.t * pos_dx - st1.t * pos_dy) / (st1.s * st2.t - st2.s * st1.t);
+	vec3 N      = normalize(fragNormal);
+	T           = normalize(T - N * dot(N, T));
+	vec3 B      = normalize(cross(N, T));
+	mat3 TBN    = mat3(T, B, N);
+
+	return normalize(TBN * normalize(2.0 * n - 1.0));
+}
+
+
+vec3 GetDirectionalLightDirection(uint index)
+{
+	return normalize(view.directionalLights[index].direction.xyz);
+}
+
+vec3 GetDirectionalLightColor(uint index)
+{
+	return view.directionalLights[index].color.rgb;
+}
+
+float GetDirectionalLightIntensity(uint index)
+{
+	return view.directionalLights[index].color.w;
+}
+
+vec3 ApplyDirectionalLight(uint index, vec3 n)
+{
+	vec3 l = GetDirectionalLightDirection(index);
+	float ndotl = clamp(dot(n, l), 0.0, 1.0);
+	float d = GetDirectionalLightIntensity(index);
+	vec3 color = GetDirectionalLightColor(index);
+	return ndotl * d * color;
+}
+
+
+vec3 GetPointLightPosition(uint index)
+{
+	return view.pointLights[index].position.xyz;
+}
+
+vec3 GetPointLightDirection(uint index, vec3 pos)
+{
+	return normalize(view.pointLights[index].position.xyz - pos);
+}
+
+float GetPointLightFalloff(uint index)
+{
+	return view.pointLights[index].direction.w;
+}
+
+vec3 GetPointLightColor(uint index)
+{
+	return view.pointLights[index].color.rgb;
+}
+
+float GetPointLightIntensity(uint index)
+{
+	return view.pointLights[index].color.w;
+}
+
+vec3 ApplyPointLight(uint index, vec3 pos, vec3 n)
+{
+	vec3 l = GetPointLightDirection(index, pos);
+
+	float ndotl = clamp(dot(n, l), 0.0, 1.0);
+
+	vec3 light_pos = GetPointLightPosition(index);
+	float dist = distance(light_pos,pos);
+	float falloff_dist = GetPointLightFalloff(index);
+	float falloff = remap(dist, 0.0, falloff_dist, 0.0, 1.0);
+	falloff = 1.0 - falloff;
+	float d = GetPointLightIntensity(index);
+	vec3 color = GetPointLightColor(index);
+	return ndotl * d * color * falloff;
 }
 
 
@@ -135,66 +241,6 @@ float D_GGX(float NdotH, float roughness)
 	float alphaRoughnessSq = roughness * roughness;
 	float f                = (NdotH * alphaRoughnessSq - NdotH) * NdotH + 1.0;
 	return alphaRoughnessSq / (PI * f * f);
-}
-
-
-vec3 ComputeNormal()
-{
-	vec3 pos_dx = dFdx(fragPosition);
-	vec3 pos_dy = dFdy(fragPosition);
-	vec3 st1    = dFdx(vec3(fragTexCoord, 0.0));
-	vec3 st2    = dFdy(vec3(fragTexCoord, 0.0));
-	vec3 T      = (st2.t * pos_dx - st1.t * pos_dy) / (st1.s * st2.t - st2.s * st1.t);
-	vec3 N      = normalize(fragNormal);
-	T           = normalize(T - N * dot(N, T));
-	vec3 B      = normalize(cross(N, T));
-	mat3 TBN    = mat3(T, B, N);
-	
-	return normalize(TBN[2].xyz);
-}
-
-
-vec3 ComputeNormal(vec3 n)
-{
-	vec3 pos_dx = dFdx(fragPosition);
-	vec3 pos_dy = dFdy(fragPosition);
-	vec3 st1    = dFdx(vec3(fragTexCoord, 0.0));
-	vec3 st2    = dFdy(vec3(fragTexCoord, 0.0));
-	vec3 T      = (st2.t * pos_dx - st1.t * pos_dy) / (st1.s * st2.t - st2.s * st1.t);
-	vec3 N      = normalize(fragNormal);
-	T           = normalize(T - N * dot(N, T));
-	vec3 B      = normalize(cross(N, T));
-	mat3 TBN    = mat3(T, B, N);
-
-	return normalize(TBN * normalize(2.0 * n - 1.0));
-}
-
-
-vec3 GetDirectionalLightDirection(uint index)
-{
-	return normalize(view.directionalLights[index].direction.xyz);
-}
-
-
-vec3 GetDirectionalLightColor(uint index)
-{
-	return view.directionalLights[index].color.rgb;
-}
-
-
-float GetDirectionalLightIntensity(uint index)
-{
-	return saturate(view.directionalLights[index].color.w);
-}
-
-
-vec3 ApplyDirectionalLight(uint index, vec3 n)
-{
-	vec3 l = GetDirectionalLightDirection(index);
-
-	float ndotl = clamp(dot(n, l), 0.0, 1.0);
-
-	return ndotl * GetDirectionalLightIntensity(index) * GetDirectionalLightColor(index);
 }
 
 
@@ -351,6 +397,10 @@ void main()
 		// TODO : Add specular microfacet multiple scattering term (energy-conservation)
 
 		DirectLighting += ApplyDirectionalLight(i, N) * (DirectDiffuseColor + DirectSpecularColor);
+	}
+	for (uint i = 0u; i < POINT_LIGHTS; ++i)
+	{
+		DirectLighting += ApplyPointLight(i, P, N);
 	}
 
 	// (2) Indirect Lighting : Simple lambert diffuse as indirect lighting

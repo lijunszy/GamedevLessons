@@ -18,7 +18,7 @@ struct light
 {
 	vec4 position;  // position.w represents type of light
 	vec4 color;     // color.w represents light intensity
-	vec4 direction; // direction.w represents range
+	vec4 direction; // direction.w represents fall off
 	vec4 info;      // (only used for spot lights) info.x represents light inner cone angle, info.y represents light outer cone angle
 };
 
@@ -88,7 +88,8 @@ vec3 lerp(vec3 v1, vec3 v2, float a)
 
 float remap(float value, float inputMin, float inputMax, float outputMin, float outputMax)
 {
-	return (value - inputMin) / (inputMax - inputMin) * (outputMin - outputMax) + outputMin;
+	value = clamp(value, inputMin, inputMax);
+	return (value - inputMin) / (inputMax - inputMin) * (outputMax - outputMin) + outputMin;
 }
 
 
@@ -104,32 +105,32 @@ vec3 GetDirectionalLightColor(uint index)
 
 float GetDirectionalLightIntensity(uint index)
 {
-	return saturate(view.directionalLights[index].color.w);
+	return view.directionalLights[index].color.w;
 }
 
 vec3 ApplyDirectionalLight(uint index, vec3 n)
 {
 	vec3 l = GetDirectionalLightDirection(index);
-
 	float ndotl = clamp(dot(n, l), 0.0, 1.0);
-
-	return ndotl * GetDirectionalLightIntensity(index) * GetDirectionalLightColor(index);
+	float d = GetDirectionalLightIntensity(index);
+	vec3 color = GetDirectionalLightColor(index);
+	return ndotl * d * color;
 }
 
 
 vec3 GetPointLightPosition(uint index)
 {
-	return normalize(view.pointLights[index].position.xyz);
+	return view.pointLights[index].position.xyz;
 }
 
-vec3 GetPointLightDirection(uint index)
+vec3 GetPointLightDirection(uint index, vec3 pos)
 {
-	return normalize(view.pointLights[index].direction.xyz);
+	return normalize(view.pointLights[index].position.xyz - pos);
 }
 
 float GetPointLightFalloff(uint index)
 {
-	return normalize(view.pointLights[index].direction.w);
+	return view.pointLights[index].direction.w;
 }
 
 vec3 GetPointLightColor(uint index)
@@ -139,22 +140,23 @@ vec3 GetPointLightColor(uint index)
 
 float GetPointLightIntensity(uint index)
 {
-	return saturate(view.pointLights[index].color.w);
+	return view.pointLights[index].color.w;
 }
 
 vec3 ApplyPointLight(uint index, vec3 pos, vec3 n)
 {
-	vec3 l = GetPointLightDirection(index);
+	vec3 l = GetPointLightDirection(index, pos);
 
 	float ndotl = clamp(dot(n, l), 0.0, 1.0);
 
 	vec3 light_pos = GetPointLightPosition(index);
-	float distance = length(light_pos - pos);
-	float falloff = GetPointLightFalloff(index);
-	float FalloffExponent = clamp(distance, 0.0, 1.0);
-	// @TODO
-	FalloffExponent = 1.0 - FalloffExponent;
-	return ndotl * GetPointLightIntensity(index) * GetPointLightColor(index) * FalloffExponent;
+	float dist = distance(light_pos,pos);
+	float falloff_dist = GetPointLightFalloff(index);
+	float falloff = remap(dist, 0.0, falloff_dist, 0.0, 1.0);
+	falloff = 1.0 - falloff;
+	float d = GetPointLightIntensity(index);
+	vec3 color = GetPointLightColor(index);
+	return ndotl * d * color * falloff;
 }
 
 // [0] Frensel Schlick
@@ -336,6 +338,8 @@ void main()
 	float Roughness = saturate(GBufferB.b);
 	vec3 Normal = GBufferA.rgb * 2.0 - 1.0;
 	vec3 AmbientOcclution = vec3(GBufferC.a);
+	vec3 EmissiveColor = SceneColor.rgb;
+	float Mask = SceneColor.a;
 
 	Roughness = max(0.01, Roughness);
 	float AO = saturate(AmbientOcclution.r);
@@ -404,6 +408,7 @@ void main()
 	}
 
 	vec3 FinalColor = DirectLighting + IndirectLighting * 0.3 + ReflectionColor;
+	FinalColor *= Mask;
 
 	// Gamma correct
 	FinalColor = pow(FinalColor, vec3(0.4545));

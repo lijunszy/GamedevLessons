@@ -67,12 +67,15 @@ void main()
 	float Roughness = texture(sampler3, fragTexCoord).r;
 	vec3 Normal = ComputeNormal(texture(sampler4, fragTexCoord).rgb);
 	vec3 AmbientOcclution = texture(sampler5, fragTexCoord).rgb;
+	vec3 Emissive = texture(sampler6, fragTexCoord).rgb;
+	vec3 OpacityMask = texture(sampler7, fragTexCoord).rgb;
 
 	Roughness = max(0.01, Roughness);
 	float AO = AmbientOcclution.r;
 	vec3 NormalPacked = (normalize(Normal) + 1.0) / 2.0;
+	float Mask = OpacityMask.r;
 
-	outSceneColor = vec4(1.0, 0.25, 0.0, 1.0);;
+	outSceneColor = vec4(Emissive, Mask);;
 	outGBufferA = vec4(vec3(NormalPacked), 1.0);
 	outGBufferB = vec4(vec3(Metallic, 1.0, Roughness), 1.0);
 	outGBufferC = vec4(vec3(BaseColor), AO);

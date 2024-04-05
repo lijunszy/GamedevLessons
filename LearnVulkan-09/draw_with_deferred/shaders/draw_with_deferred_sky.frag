@@ -43,7 +43,7 @@ void main() {
 	vec3 CubeMapColor = textureLod(CubemapSampler, R, 0).rgb * 10.0;
 
 	// Gamma correct
-	vec3 FinalColor = pow(CubeMapColor, vec3(0.4545));
+	vec3 FinalColor = pow(SkydomeColor, vec3(0.4545));
 
 	outColor = vec4(FinalColor, 1.0);
 }
