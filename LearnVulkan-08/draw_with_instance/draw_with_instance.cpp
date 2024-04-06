@@ -606,8 +606,8 @@ public:
 		CreateFramebuffers();		// 创建帧缓存，包含在SwaoChain中
 		CreateUniformBuffers();		// 创建UnifromBuffer统一缓存区
 		CreateShadowmapPass();		// 创建阴影贴图渲染通道
+		CreateSkydomePass();		// 创建环境反射球天空球通道
 		CreateBackgroundPass();		// 创建背景渲染通道
-		CreateSkydomePass();
 		CreateBaseScenePass();		// 创建基础物体渲染通道
 		CreateIndirectScenePass();
 		CreateCommandBuffer();		// 创建指令缓存，指令发送前变成指令缓存
@@ -1943,9 +1943,6 @@ protected:
 
 	void CreateBackgroundPass()
 	{
-		// 创建环境反射纹理资源
-		CreateCubemapResources();
-
 		// 创建背景贴图
 		CreateImageContext(
 			BackgroundPass.Image,
@@ -1975,6 +1972,9 @@ protected:
 
 	void CreateSkydomePass()
 	{
+		// 创建环境反射纹理资源
+		CreateCubemapResources();
+
 		CreateImageContext(
 			SkydomePass.Image,
 			SkydomePass.Memory,

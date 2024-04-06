@@ -148,15 +148,17 @@ vec3 ApplyPointLight(uint index, vec3 pos, vec3 n)
 	vec3 l = GetPointLightDirection(index, pos);
 
 	float ndotl = clamp(dot(n, l), 0.0, 1.0);
+	float3 toLight = light_pos - pos;
+	float distanceSqr = dot( toLight, toLight );
 
 	vec3 light_pos = GetPointLightPosition(index);
 	float dist = distance(light_pos,pos);
-	float falloff_dist = GetPointLightFalloff(index);
-	float falloff = remap(dist, 0.0, falloff_dist, 0.0, 1.0);
-	falloff = 1.0 - falloff;
+	float falloff = GetPointLightFalloff(index);
+	float attenuation = remap(dist, 0.0, falloff, 0.0, 1.0);
+	attenuation = 1.0 - attenuation;
 	float d = GetPointLightIntensity(index);
 	vec3 color = GetPointLightColor(index);
-	return ndotl * d * color * falloff;
+	return ndotl * d * color * attenuation;
 }
 
 // [0] Frensel Schlick

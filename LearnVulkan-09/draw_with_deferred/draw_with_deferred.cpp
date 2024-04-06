@@ -1,4 +1,4 @@
-// Copyright LearnVulkan-08: Draw with Instance, @xukai. All Rights Reserved.
+// Copyright LearnVulkan-09: Draw with Deferred, @xukai. All Rights Reserved.
 #define GLFW_INCLUDE_VULKAN
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // 深度缓存区，OpenGL默认是（-1.0， 1.0）Vulakn为（0.0， 1.0）
@@ -74,6 +74,31 @@ enum EGraphicPipelineType
 };
 
 
+struct FLight
+{
+	glm::vec4 Position;
+	glm::vec4 Color; // rgb for Color, a for intensity
+	glm::vec4 Direction;
+	glm::vec4 LightInfo;
+
+	FLight& FLight::operator=(const FLight& rhs)
+	{
+		Position = rhs.Position;
+		Color = rhs.Color;
+		Direction = rhs.Direction;
+		LightInfo = rhs.LightInfo;
+		return *this;
+	}
+};
+
+/** 物体的MVP矩阵信息*/
+struct FUniformBufferBase {
+	glm::mat4 Model;
+	glm::mat4 View;
+	glm::mat4 Proj;
+};
+
+/** 顶点数据存储结构*/
 struct FVertex {
 	glm::vec3 Position;
 	glm::vec3 Normal;
@@ -337,30 +362,6 @@ class FVulkanRendererApp
 			SpecConstantsCount = 10;
 		}
 	} GlobalConstants;
-
-	struct FLight
-	{
-		glm::vec4 Position;
-		glm::vec4 Color; // rgb for Color, a for intensity
-		glm::vec4 Direction;
-		glm::vec4 LightInfo;
-
-		FLight& FLight::operator=(const FLight& rhs)
-		{
-			Position = rhs.Position;
-			Color = rhs.Color;
-			Direction = rhs.Direction;
-			LightInfo = rhs.LightInfo;
-			return *this;
-		}
-	};
-
-	/** 物体的MVP矩阵信息*/
-	struct FUniformBufferBase {
-		glm::mat4 Model;
-		glm::mat4 View;
-		glm::mat4 Proj;
-	};
 
 	/** 场景灯光信息*/
 	struct FUniformBufferView {
@@ -706,14 +707,14 @@ public:
 		CreateLogicalDevice();		// 创建逻辑硬件，对应物理硬件
 		CreateSwapChain();			// 创建交换链，用于渲染数据和图像显示的中间交换
 		CreateSwapChainImageViews();// 创建图像显示，包含在SwapChain中
-		CreateRenderPass();			// 创建渲染通路
-		CreateFramebuffers();		// 创建帧缓存，包含在SwaoChain中
+		CreateRenderPass();			// 创建渲染通道
+		CreateFramebuffers();		// 创建帧缓存，包含在SwapChain中
 		CreateCommandPool();		// 创建指令池，存储所有的渲染指令
 		CreateUniformBuffers();		// 创建UnifromBuffer统一缓存区
-		CreateShadowmapPass();		// 创建阴影贴图渲染通路
-		CreateSkydomePass();		// 创建天空球和反射球通路
-		CreateBackgroundPass();		// 创建背景渲染通路
-		CreateBaseScenePass();		// 创建基础物体渲染通路
+		CreateShadowmapPass();		// 创建阴影贴图渲染通道
+		CreateSkydomePass();		// 创建天空球和反射球通道
+		CreateBackgroundPass();		// 创建背景渲染通道
+		CreateBaseScenePass();		// 创建基础物体渲染通道
 		CreateBaseSceneIndirectPass();
 #if ENABLE_DEFEERED_RENDERING
 		CreateBaseSceneDeferredPass();
@@ -1430,7 +1431,7 @@ protected:
 		DepthAttachmentRef.attachment = 1;
 		DepthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		// 渲染子通路 SubPass
+		// 渲染子通道 SubPass
 		// SubPass是RenderPass的下属任务，和RenderPass共享Framebuffer等渲染资源
 		// 某些渲染操作，比如后处理的Blooming，当前渲染需要依赖上一个渲染结果，但是渲染资源不变，这是SubPass可以优化性能
 		VkSubpassDescription subpass{};
@@ -3587,6 +3588,90 @@ protected:
 			vkFreeMemory(Device, RenderIndirectInstancedObject.IndirectCommandsBufferMemory, nullptr);
 		}
 
+		// 清理 BaseSceneDeferredPass
+#if ENABLE_DEFEERED_RENDERING
+		vkDestroyDescriptorSetLayout(Device, BaseSceneDeferredPass.LightingDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorPool(Device, BaseSceneDeferredPass.LightingDescriptorPool, nullptr);
+		vkDestroyPipelineLayout(Device, BaseSceneDeferredPass.LightingPipelineLayout, nullptr);
+		for (uint32_t i = 0; i < GlobalConstants.SpecConstantsCount; i++)
+		{
+			vkDestroyPipeline(Device, BaseSceneDeferredPass.LightingPipelines[i], nullptr);
+		}
+		vkDestroyRenderPass(Device, BaseSceneDeferredPass.SceneRenderPass, nullptr);
+		vkDestroyFramebuffer(Device, BaseSceneDeferredPass.SceneFrameBuffer, nullptr);
+		vkDestroyDescriptorSetLayout(Device, BaseSceneDeferredPass.SceneDescriptorSetLayout, nullptr);
+		vkDestroyPipelineLayout(Device, BaseSceneDeferredPass.ScenePipelineLayout, nullptr);
+		for (uint32_t i = 0; i < GlobalConstants.SpecConstantsCount; i++)
+		{
+			vkDestroyPipeline(Device, BaseSceneDeferredPass.ScenePipelines[i], nullptr);
+			vkDestroyPipeline(Device, BaseSceneDeferredPass.ScenePipelinesInstanced[i], nullptr);
+		}
+		for (size_t i = 0; i < BaseSceneDeferredPass.RenderObjects.size(); i++)
+		{
+			FRenderObject& renderObject = BaseSceneDeferredPass.RenderObjects[i];
+
+			vkDestroyDescriptorPool(Device, renderObject.MateData.DescriptorPool, nullptr);
+
+			for (size_t j = 0; j < renderObject.MateData.TextureImages.size(); j++)
+			{
+				vkDestroyImageView(Device, renderObject.MateData.TextureImageViews[j], nullptr);
+				vkDestroySampler(Device, renderObject.MateData.TextureSamplers[j], nullptr);
+				vkDestroyImage(Device, renderObject.MateData.TextureImages[j], nullptr);
+				vkFreeMemory(Device, renderObject.MateData.TextureImageMemorys[j], nullptr);
+			}
+
+			vkDestroyBuffer(Device, renderObject.MeshData.VertexBuffer, nullptr);
+			vkFreeMemory(Device, renderObject.MeshData.VertexBufferMemory, nullptr);
+			vkDestroyBuffer(Device, renderObject.MeshData.IndexBuffer, nullptr);
+			vkFreeMemory(Device, renderObject.MeshData.IndexBufferMemory, nullptr);
+		}
+		for (size_t i = 0; i < BaseSceneDeferredPass.RenderInstancedObjects.size(); i++)
+		{
+			FRenderInstancedObject& renderInstancedObject = BaseSceneDeferredPass.RenderInstancedObjects[i];
+
+			vkDestroyDescriptorPool(Device, renderInstancedObject.MateData.DescriptorPool, nullptr);
+
+			for (size_t j = 0; j < renderInstancedObject.MateData.TextureImages.size(); j++)
+			{
+				vkDestroyImageView(Device, renderInstancedObject.MateData.TextureImageViews[j], nullptr);
+				vkDestroySampler(Device, renderInstancedObject.MateData.TextureSamplers[j], nullptr);
+				vkDestroyImage(Device, renderInstancedObject.MateData.TextureImages[j], nullptr);
+				vkFreeMemory(Device, renderInstancedObject.MateData.TextureImageMemorys[j], nullptr);
+			}
+
+			vkDestroyBuffer(Device, renderInstancedObject.MeshData.InstancedBuffer, nullptr);
+			vkFreeMemory(Device, renderInstancedObject.MeshData.InstancedBufferMemory, nullptr);
+			vkDestroyBuffer(Device, renderInstancedObject.MeshData.VertexBuffer, nullptr);
+			vkFreeMemory(Device, renderInstancedObject.MeshData.VertexBufferMemory, nullptr);
+			vkDestroyBuffer(Device, renderInstancedObject.MeshData.IndexBuffer, nullptr);
+			vkFreeMemory(Device, renderInstancedObject.MeshData.IndexBufferMemory, nullptr);
+		}
+		vkDestroyImageView(Device, GBuffer.DepthStencilImageView, nullptr);
+		vkDestroySampler(Device, GBuffer.DepthStencilSampler, nullptr);
+		vkDestroyImage(Device, GBuffer.DepthStencilImage, nullptr);
+		vkFreeMemory(Device, GBuffer.DepthStencilMemory, nullptr);
+		vkDestroyImageView(Device, GBuffer.SceneColorImageView, nullptr);
+		vkDestroySampler(Device, GBuffer.SceneColorSampler, nullptr);
+		vkDestroyImage(Device, GBuffer.SceneColorImage, nullptr);
+		vkFreeMemory(Device, GBuffer.SceneColorMemory, nullptr);
+		vkDestroyImageView(Device, GBuffer.GBufferAImageView, nullptr);
+		vkDestroySampler(Device, GBuffer.GBufferASampler, nullptr);
+		vkDestroyImage(Device, GBuffer.GBufferAImage, nullptr);
+		vkFreeMemory(Device, GBuffer.GBufferAMemory, nullptr);
+		vkDestroyImageView(Device, GBuffer.GBufferBImageView, nullptr);
+		vkDestroySampler(Device, GBuffer.GBufferBSampler, nullptr);
+		vkDestroyImage(Device, GBuffer.GBufferBImage, nullptr);
+		vkFreeMemory(Device, GBuffer.GBufferBMemory, nullptr);
+		vkDestroyImageView(Device, GBuffer.GBufferCImageView, nullptr);
+		vkDestroySampler(Device, GBuffer.GBufferCSampler, nullptr);
+		vkDestroyImage(Device, GBuffer.GBufferCImage, nullptr);
+		vkFreeMemory(Device, GBuffer.GBufferCMemory, nullptr);
+		vkDestroyImageView(Device, GBuffer.GBufferDImageView, nullptr);
+		vkDestroySampler(Device, GBuffer.GBufferDSampler, nullptr);
+		vkDestroyImage(Device, GBuffer.GBufferDImage, nullptr);
+		vkFreeMemory(Device, GBuffer.GBufferDMemory, nullptr);
+#endif
+
 		vkDestroyCommandPool(Device, CommandPool, nullptr);
 
 		vkDestroyDevice(Device, nullptr);
@@ -5160,48 +5245,6 @@ private:
 	/** 从图片文件中读取贴像素信息*/
 	static void LoadTextureAsset(const std::string& filename, std::vector<uint8_t>& outPixels, int& outWidth, int& outHeight, int& outChannels, int& outMipLevels)
 	{
-        // TODO: cache raw data.
-        //        struct FTextureCache{
-        //            FTextureCache()
-        //            {
-        //            };
-        //
-        //            ~FTextureCache()
-        //            {
-        //            };
-        //            uint8_t* Pixels;
-        //            int Width, Height, Channels, MipLevels;
-        //        } Cache;
-        //
-        //        auto findCacheFile = [filename]()
-        //        {
-        //            std::string outfilename = filename;
-        //            return outfilename.replace(filename.find(".png"), sizeof(".png") - 1, ".cache0");
-        //        };
-        //
-        //        std::string cachefile = findCacheFile();
-        //        if (std::filesystem::exists(cachefile))
-        //        {
-        //            std::ifstream iout(cachefile, std::ios::in | std::ios::binary);
-        //            iout.read((char*)&Cache, sizeof(Cache));
-        //            iout.close();
-        //
-        //            outMipLevels = Cache.MipLevels;
-        //            outChannels = Cache.Channels;
-        //            outHeight = Cache.Height;
-        //            outWidth = Cache.Width;
-        //            outPixels = Cache.Pixels;
-        //            Cache.Pixels = outPixels;
-        //            Cache.Width = outWidth;
-        //            Cache.Height = outHeight;
-        //            Cache.Channels = outChannels;
-        //            Cache.MipLevels = outMipLevels;
-        //
-        //            std::ofstream fout(cachefile, std::ios::out | std::ios::binary);
-        //            fout.write((char*)&Cache, sizeof(Cache));
-        //            fout.close();
-        //
-        //        }
         stbi_hdr_to_ldr_scale(2.2f);
         stbi_uc* pixels = stbi_load(filename.c_str(), &outWidth, &outHeight, &outChannels, STBI_rgb_alpha);
         stbi_hdr_to_ldr_scale(1.0f);
