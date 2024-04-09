@@ -1903,7 +1903,7 @@ protected:
 
 		FLight Moonlight;
 		Moonlight.Position = glm::vec4(20.0f, 0.0f, 20.0f, 0.0);
-		Moonlight.Color = glm::vec4(0.0, 0.1, 0.6, 10.0);
+		Moonlight.Color = glm::vec4(0.0, 0.1, 0.6, 15.0);
 		Moonlight.Direction = glm::vec4(glm::normalize(glm::vec3(Moonlight.Position.x, Moonlight.Position.y, Moonlight.Position.z)), 0.0);
 		Moonlight.LightInfo = glm::vec4(0.0, 0.0, 0.0, 0.0);
 		View.DirectionalLights[0] = Moonlight;
@@ -1920,7 +1920,7 @@ protected:
 			float R = (((float)RandRange(50, 75) / 100.0f));
 			float G = (((float)RandRange(25, 50) / 100.0f));
 			float B = 0.0;
-			PointLight.Color = glm::vec4(R, G, B, 3.0);
+			PointLight.Color = glm::vec4(R, G, B, 10.0);
 			PointLight.Direction = glm::vec4(0.0, 0.0, 1.0, 1.5);
 			PointLight.LightInfo = glm::vec4(0.0, 0.0, 0.0, 0.0);
 			View.PointLights[i] = PointLight;
@@ -3370,7 +3370,7 @@ protected:
 			}
 
 			// 【主场景】渲染天空球
-			if (SCENE_SHOW_SKYDOME)
+			if (SCENE_SHOW_SKYDOME && GlobalConstants.SpecConstants == 0 /* Don't render sky on debug mode*/)
 			{
 				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkydomePass.Pipelines[0]);
 				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkydomePass.PipelineLayout, 0, 1, &SkydomePass.DescriptorSets[CurrentFrame], 0, nullptr);
@@ -4089,6 +4089,7 @@ protected:
 			float Z = 1.5;
 			View.PointLights[i].Position = glm::vec4(X, Y, Z, 1.0);
 		}
+		View.LightsCount = glm::ivec4(1, PointLightNum, 0, CubemapMaxMips);
 		View.zNear = ShadowmapPass.zNear;
 		View.zFar = ShadowmapPass.zFar;
 

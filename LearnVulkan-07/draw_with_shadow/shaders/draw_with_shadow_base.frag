@@ -242,12 +242,14 @@ float GetSpecularOcclusion(float NoV, float RoughnessSq, float AO)
 
 float DielectricSpecularToF0(float Specular)
 {
-	return 0.08f * Specular;
+	return F0.x * 2.0f * Specular;
 }
 
 
 vec3 ComputeF0(float Specular, vec3 BaseColor, float Metallic)
 {
+	// clamp pure black base color to get clear coat
+	BaseColor = clamp(BaseColor, F0, vec3(1.0f));
 	return lerp(DielectricSpecularToF0(Specular).xxx, BaseColor, Metallic.x);
 }
 
@@ -347,7 +349,7 @@ void main()
 	}
 
 	// Indirect Lighting : Simple lambert diffuse as indirect lighting
-	vec3 IndirectLighting = BaseColor.rgb / PI * AO;
+	vec3 IndirectLighting = DiffuseColor.rgb / PI * AO;
 
 	// Reflection Specular : Image based lighting
 	vec3 Specular = ComputeF0(0.5, BaseColor, Metallic);

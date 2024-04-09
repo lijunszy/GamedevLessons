@@ -40,7 +40,7 @@ uint POINT_LIGHTS = view.lightsCount[1];
 uint SPOT_LIGHTS = view.lightsCount[2];
 uint SKY_MAXMIPS = view.lightsCount[3];
 
-layout(set = 0, binding = 2)  uniform samplerCube skycubemap;  // sky cubemap
+layout(set = 0, binding = 2)  uniform samplerCube cubemap;  // sky cubemap
 layout(set = 0, binding = 3)  uniform sampler2D shadowmap;  // sky cubemap
 layout(set = 0, binding = 4)  uniform sampler2D sampler1; // basecolor
 layout(set = 0, binding = 5)  uniform sampler2D sampler2; // metalic
@@ -143,9 +143,9 @@ vec3 ApplyDirectionalLight(uint index, vec3 n)
 {
 	vec3 l = GetDirectionalLightDirection(index);
 	float ndotl = clamp(dot(n, l), 0.0, 1.0);
-	float d = GetDirectionalLightIntensity(index);
+	float density = GetDirectionalLightIntensity(index);
 	vec3 color = GetDirectionalLightColor(index);
-	return ndotl * d * color;
+	return ndotl * density * color;
 }
 
 
@@ -178,16 +178,19 @@ vec3 ApplyPointLight(uint index, vec3 pos, vec3 n)
 {
 	vec3 l = GetPointLightDirection(index, pos);
 
-	float ndotl = clamp(dot(n, l), 0.0, 1.0);
-
 	vec3 light_pos = GetPointLightPosition(index);
-	float dist = distance(light_pos,pos);
-	float falloff_dist = GetPointLightFalloff(index);
-	float falloff = remap(dist, 0.0, falloff_dist, 0.0, 1.0);
-	falloff = 1.0 - falloff;
-	float d = GetPointLightIntensity(index);
+	float falloff = GetPointLightFalloff(index);
+	float density = GetPointLightIntensity(index);
 	vec3 color = GetPointLightColor(index);
-	return ndotl * d * color * falloff;
+
+	float ndotl = clamp(dot(n, l), 0.0, 1.0);
+	vec3 toLight = light_pos - pos;
+	float distanceSqr = dot(toLight, toLight);
+
+	float dist = distance(light_pos, pos);
+	float attenuation = remap(dist, 0.0, falloff, 0.0, 1.0);
+	attenuation = (1.0 - attenuation);
+	return ndotl * density * color * attenuation;
 }
 
 
@@ -292,13 +295,53 @@ float GetSpecularOcclusion(float NoV, float RoughnessSq, float AO)
 
 float DielectricSpecularToF0(float Specular)
 {
-	return 0.08f * Specular;
+	return F0.x * 2.0f * Specular;
 }
 
 
 vec3 ComputeF0(float Specular, vec3 BaseColor, float Metallic)
 {
+	// clamp pure black base color to get clear coat
+	BaseColor = clamp(BaseColor, F0, vec3(1.0f));
 	return lerp(DielectricSpecularToF0(Specular).xxx, BaseColor, Metallic.x);
+}
+
+
+struct FDirectLighting
+{
+	vec3 Diffuse;
+	vec3 Specular;
+	vec3 Transmission;
+};
+
+FDirectLighting DefaultLitBxDF(vec3 DiffuseColor, vec3 SpecularColor, float Roughness, float LoH, float NoV, float NoL, float NoH)
+{
+	FDirectLighting Lighting;
+
+	float F90 = saturate(50.0 * F0.r);
+	vec3 F = F_Schlick(F0, F90, LoH);
+
+	float Vis = V_SmithGGXCorrelated(NoV, NoL, Roughness);
+	float D = D_GGX(NoH, Roughness);
+	vec3 Fr = F * D * Vis;
+	float Fd = Fr_DisneyDiffuse(NoV, NoL, LoH, Roughness);
+
+	Lighting.Diffuse = DiffuseColor * (vec3(1.0) - F) * Fd;
+
+	Lighting.Specular = Fr;
+
+	// @TODO: Energy Conservation
+	//FBxDFEnergyTermsRGB EnergyTerms = ComputeGGXSpecEnergyTermsRGB(GBuffer.Roughness, Context.NoV, GBuffer.SpecularColor);
+	//Lighting.Diffuse *= ComputeEnergyPreservation(EnergyTerms);
+	//Lighting.Specular *= ComputeEnergyConservation(EnergyTerms);
+
+	Lighting.Transmission = vec3(0.0f);
+	return Lighting;
+}
+
+FDirectLighting IntegrateBxDF(vec3 DiffuseColor, vec3 SpecularColor, float Roughness, float LoH, float NoV, float NoL, float NoH)
+{
+	return DefaultLitBxDF(DiffuseColor, SpecularColor, Roughness, LoH, NoV, NoL, NoH);
 }
 
 
@@ -370,53 +413,6 @@ void main()
 	vec3 V = normalize(view.cameraInfo.xyz - P);
 	float NdotV = saturate(dot(N, V));
 
-	// (1) Direct Lighting : DisneyDiffuse + SpecularGGX
-	vec3 DirectLighting = vec3(0.0);
-	vec3 DiffuseColor = BaseColor.rgb * (1.0 - Metallic);
-	for (uint i = 0u; i < DIRECTIONAL_LIGHTS; ++i)
-	{
-		vec3 L = GetDirectionalLightDirection(i);
-		vec3 H = normalize(V + L);
-
-		float LdotH = saturate(dot(L, H));
-		float NdotH = saturate(dot(N, H));
-		float NdotL = saturate(dot(N, L));
-
-		float F90 = saturate(50.0 * F0.r);
-		vec3  F   = F_Schlick(F0, F90, LdotH);
-		float Vis = V_SmithGGXCorrelated(NdotV, NdotL, Roughness);
-		float D   = D_GGX(NdotH, Roughness);
-		vec3  Fr  = F * D * Vis;
-
-		float Fd = Fr_DisneyDiffuse(NdotV, NdotL, LdotH, Roughness);
-
-		vec3 DirectDiffuseColor = DiffuseColor * (vec3(1.0) - F) * Fd;
-		vec3 DirectSpecularColor = Fr;
-
-		// TODO : Add energy presevation (i.e. attenuation of the specular layer onto the diffuse component
-		// TODO : Add specular microfacet multiple scattering term (energy-conservation)
-
-		DirectLighting += ApplyDirectionalLight(i, N) * (DirectDiffuseColor + DirectSpecularColor);
-	}
-	for (uint i = 0u; i < POINT_LIGHTS; ++i)
-	{
-		DirectLighting += ApplyPointLight(i, P, N);
-	}
-
-	// (2) Indirect Lighting : Simple lambert diffuse as indirect lighting
-	vec3 IndirectLighting = BaseColor.rgb / PI * AO;
-
-	// (3) Reflection Specular : Image based lighting
-	vec3 Specular = ComputeF0(0.5, BaseColor, Metallic);
-	vec3 ReflectionBRDF = EnvBRDFApprox(Specular, Roughness, NdotV);
-	float ratio = 1.00 / 1.52;
-	vec3 I = V;
-	vec3 R = refract(I, normalize(N), ratio);
-	float MIPS = ComputeReflectionMipFromRoughness(Roughness, SKY_MAXMIPS);
-	vec3 Reflection_L = textureLod(skycubemap, R, MIPS).rgb * 10.0;
-	float Reflection_V = GetSpecularOcclusion(NdotV, Roughness * Roughness, AO);
-	vec3 ReflectionColor = Reflection_L * Reflection_V * ReflectionBRDF;
-
 	float ShadowFactor = 1.0;
 	if (SPEC_CONSTANTS == 8)
 	{
@@ -429,7 +425,53 @@ void main()
 		ShadowFactor = ComputePCF(ShadowCoord / ShadowCoord.w, 2);
 	}
 
-	vec3 FinalColor = DirectLighting + IndirectLighting * 0.3 + ReflectionColor;
+	// (1) Direct Lighting : DisneyDiffuse + SpecularGGX
+	vec3 DirectLighting = vec3(0.0);
+	vec3 DiffuseColor = BaseColor.rgb * (1.0 - Metallic);
+	vec3 SpecularColor = vec3(1.0);
+	for (uint i = 0u; i < DIRECTIONAL_LIGHTS; ++i)
+	{
+		vec3 L = GetDirectionalLightDirection(i);
+		vec3 H = normalize(V + L);
+
+		float LdotH = saturate(dot(L, H));
+		float NdotH = saturate(dot(N, H));
+		float NdotL = saturate(dot(N, L));
+
+		FDirectLighting DirectionalLight = IntegrateBxDF(DiffuseColor, SpecularColor, Roughness, LdotH, NdotV, NdotL, NdotH);
+
+		DirectLighting += ApplyDirectionalLight(i, N) * (DirectionalLight.Diffuse + DirectionalLight.Specular) * ShadowFactor;
+	}
+	for (uint i = 0u; i < POINT_LIGHTS; ++i)
+	{
+		vec3 L = GetPointLightDirection(i, P);
+		vec3 H = normalize(V + L);
+
+		float LdotH = saturate(dot(L, H));
+		float NdotH = saturate(dot(N, H));
+		float NdotL = saturate(dot(N, L));
+
+		FDirectLighting PointLight = IntegrateBxDF(DiffuseColor, SpecularColor, Roughness, LdotH, NdotV, NdotL, NdotH);
+
+		DirectLighting += ApplyPointLight(i, P, N) * (PointLight.Diffuse + PointLight.Specular);
+	}
+
+	// (2) Indirect Lighting : Simple lambert diffuse as indirect lighting
+	vec3 IndirectLighting = DiffuseColor / PI * AO * 0.3 * ShadowFactor;
+
+	// (3) Reflection Specular : Image based lighting
+	vec3 ReflectionSpec = ComputeF0(0.5, BaseColor, Metallic);
+	vec3 ReflectionBRDF = EnvBRDFApprox(ReflectionSpec, Roughness, NdotV);
+	float ratio = 1.00 / 1.52;
+	vec3 I = V;
+	vec3 R = refract(I, normalize(N), ratio);
+	float MIPS = ComputeReflectionMipFromRoughness(Roughness, SKY_MAXMIPS);
+	vec3 Reflection_L = textureLod(cubemap, R, MIPS).rgb * 10.0;
+	float Reflection_V = GetSpecularOcclusion(NdotV, Roughness * Roughness, AO);
+	vec3 ReflectionColor = Reflection_L * Reflection_V * ReflectionBRDF;
+
+	vec3 FinalColor = DirectLighting + IndirectLighting + ReflectionColor;
+
 	// Gamma correct
 	FinalColor = pow(FinalColor, vec3(0.4545));
 
@@ -449,8 +491,7 @@ void main()
 		case 6:
 			outColor = vec4(vec3(VertexColor), 1.0); break;
 		case 7:
-			vec3 cubemap = textureLod(skycubemap, R, 0).rgb * 10.0;
-			outColor = vec4(vec3(cubemap), 1.0); break;
+			outColor = vec4(vec3(ReflectionColor), 1.0); break;
 		case 8:
 		case 9:
 			outColor = vec4(vec3(ShadowFactor), 1.0); break;

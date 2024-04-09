@@ -112,9 +112,9 @@ vec3 ApplyDirectionalLight(uint index, vec3 n)
 {
 	vec3 l = GetDirectionalLightDirection(index);
 	float ndotl = clamp(dot(n, l), 0.0, 1.0);
-	float d = GetDirectionalLightIntensity(index);
+	float density = GetDirectionalLightIntensity(index);
 	vec3 color = GetDirectionalLightColor(index);
-	return ndotl * d * color;
+	return ndotl * density * color;
 }
 
 
@@ -147,18 +147,19 @@ vec3 ApplyPointLight(uint index, vec3 pos, vec3 n)
 {
 	vec3 l = GetPointLightDirection(index, pos);
 
+	vec3 light_pos = GetPointLightPosition(index);
+	float falloff = GetPointLightFalloff(index);
+	float density = GetPointLightIntensity(index);
+	vec3 color = GetPointLightColor(index);
+
 	float ndotl = clamp(dot(n, l), 0.0, 1.0);
-	float3 toLight = light_pos - pos;
+	vec3 toLight = light_pos - pos;
 	float distanceSqr = dot( toLight, toLight );
 
-	vec3 light_pos = GetPointLightPosition(index);
 	float dist = distance(light_pos,pos);
-	float falloff = GetPointLightFalloff(index);
 	float attenuation = remap(dist, 0.0, falloff, 0.0, 1.0);
-	attenuation = 1.0 - attenuation;
-	float d = GetPointLightIntensity(index);
-	vec3 color = GetPointLightColor(index);
-	return ndotl * d * color * attenuation;
+	attenuation = (1.0 - attenuation);
+	return ndotl * density * color * attenuation;
 }
 
 // [0] Frensel Schlick
@@ -213,6 +214,7 @@ float D_GGX(float NdotH, float roughness)
 	return alphaRoughnessSq / (PI * f * f);
 }
 
+
 #define REFLECTION_CAPTURE_ROUGHEST_MIP 1
 #define REFLECTION_CAPTURE_ROUGHNESS_MIP_SCALE 1.2
 /** 
@@ -261,13 +263,59 @@ float GetSpecularOcclusion(float NoV, float RoughnessSq, float AO)
 
 float DielectricSpecularToF0(float Specular)
 {
-	return 0.08f * Specular;
+	return F0.x * 2.0f * Specular;
 }
 
 
 vec3 ComputeF0(float Specular, vec3 BaseColor, float Metallic)
 {
+	// clamp pure black base color to get clear coat
+	BaseColor = clamp(BaseColor, F0, vec3(1.0f));
 	return lerp(DielectricSpecularToF0(Specular).xxx, BaseColor, Metallic.x);
+}
+
+
+struct FDirectLighting
+{
+	vec3 Diffuse;
+	vec3 Specular;
+	vec3 Transmission;
+};
+
+vec3 Diffuse_Lambert(vec3 DiffuseColor)
+{
+	return DiffuseColor * (1 / PI);
+}
+
+
+FDirectLighting DefaultLitBxDF(vec3 DiffuseColor, vec3 SpecularColor, float Roughness, float LoH, float NoV, float NoL, float NoH)
+{
+	FDirectLighting Lighting;
+
+	float F90 = saturate(50.0 * F0.r);
+	vec3 F = F_Schlick(F0, F90, LoH);
+
+	float Vis = V_SmithGGXCorrelated(NoV, NoL, Roughness);
+	float D = D_GGX(NoH, Roughness);
+	vec3 Fr = F * D * Vis;
+	float Fd = Fr_DisneyDiffuse(NoV, NoL, LoH, Roughness);
+
+	Lighting.Diffuse = DiffuseColor * (vec3(1.0) - F) * Fd;
+
+	Lighting.Specular = Fr;
+
+	// @TODO: Energy Conservation
+	//FBxDFEnergyTermsRGB EnergyTerms = ComputeGGXSpecEnergyTermsRGB(GBuffer.Roughness, Context.NoV, GBuffer.SpecularColor);
+	//Lighting.Diffuse *= ComputeEnergyPreservation(EnergyTerms);
+	//Lighting.Specular *= ComputeEnergyConservation(EnergyTerms);
+
+	Lighting.Transmission = vec3(0.0f);
+	return Lighting;
+}
+
+FDirectLighting IntegrateBxDF(vec3 DiffuseColor, vec3 SpecularColor, float Roughness, float LoH, float NoV, float NoL, float NoH)
+{
+	return DefaultLitBxDF(DiffuseColor, SpecularColor, Roughness, LoH, NoV, NoL, NoH);
 }
 
 
@@ -322,6 +370,77 @@ float ComputePCF(vec4 sc /*shadow croodinate*/, int r /*filtering range*/)
 }
 
 
+vec3 GBufferVis(vec3 FinalColor)
+{
+	vec2 UV = fragTexCoord * 3.0f;
+	vec4 ShadowMap = texture(ShadowMapSampler, UV);
+	vec4 DepthStencil = texture(DepthStencilSampler, UV);
+	vec4 SceneColor = texture(SceneColorSampler, UV);
+	vec4 GBufferA = texture(GBufferASampler, UV);
+	vec4 GBufferB = texture(GBufferBSampler, UV);
+	vec4 GBufferC = texture(GBufferCSampler, UV);
+	vec4 GBufferD = texture(GBufferDSampler, UV);
+
+	vec3 BaseColor = GBufferC.rgb;
+	float Metallic = saturate(GBufferB.r);
+	float Specular = saturate(GBufferB.g);
+	float Roughness = saturate(GBufferB.b);
+	vec3 Normal = GBufferA.rgb * 2.0 - 1.0;
+	vec3 AmbientOcclution = vec3(GBufferC.a);
+	vec3 EmissiveColor = SceneColor.rgb;
+	float Mask = SceneColor.a;
+
+	Roughness = max(0.01, Roughness);
+	float AO = saturate(AmbientOcclution.r);
+	vec3 N = normalize(Normal);
+	vec3 P = GBufferD.xyz;
+	vec3 V = normalize(view.cameraInfo.xyz - P);
+	float NdotV = saturate(dot(N, V));
+
+	const float Step = 1.0f / 3.0f;
+
+	vec3 Result = FinalColor;
+	if (fragTexCoord.x < Step && fragTexCoord.y < Step)
+	{
+		Result = pow(BaseColor, vec3(0.4545));
+	}
+	else if (fragTexCoord.x < Step * 2.0f && fragTexCoord.y < Step)
+	{
+		Result = vec3(Metallic);
+	}
+	else if (fragTexCoord.x < 1.0f && fragTexCoord.y < Step)
+	{
+		Result = vec3(Roughness);
+	}
+	else if (fragTexCoord.x < Step && fragTexCoord.y < Step * 2.0f)
+	{
+		Result = vec3(N);
+	}
+	else if (fragTexCoord.x < 1.0f && fragTexCoord.y < Step * 2.0f && fragTexCoord.x > Step * 2.0f)
+	{
+		Result = vec3(AO);
+	}
+	else if (fragTexCoord.x < Step && fragTexCoord.y < 1.0f)
+	{
+		Result = vec3(0.0f);
+	}
+	else if (fragTexCoord.x < Step * 2.0f && fragTexCoord.x > Step && fragTexCoord.y < 1.0f && fragTexCoord.y > Step * 2.0f)
+	{
+		float ratio = 1.00 / 1.52;
+		vec3 I = V;
+		vec3 R = refract(I, normalize(N), ratio);
+		vec3 Reflection_L = textureLod(CubeMapSampler, R, 0).rgb * 10.0;
+		Result = vec3(Reflection_L);
+	}
+	else if (fragTexCoord.x < 1.0f && fragTexCoord.x > Step * 2.0f && fragTexCoord.y < 1.0f && fragTexCoord.y > Step * 2.0f)
+	{
+		vec4 ShadowCoord = ComputeShadowCoord(P);
+		float ShadowFactor = ComputePCF(ShadowCoord / ShadowCoord.w, 2);
+		Result = vec3(ShadowFactor);
+	}
+	return Result;
+}
+
 void main()
 {
 	vec3 VertexColor = fragColor;
@@ -350,9 +469,13 @@ void main()
 	vec3 V = normalize(view.cameraInfo.xyz - P);
 	float NdotV = saturate(dot(N, V));
 
+	vec4 ShadowCoord = ComputeShadowCoord(P);
+	float ShadowFactor = ComputePCF(ShadowCoord / ShadowCoord.w, 2);
+
 	// (1) Direct Lighting : DisneyDiffuse + SpecularGGX
 	vec3 DirectLighting = vec3(0.0);
 	vec3 DiffuseColor = BaseColor.rgb * (1.0 - Metallic);
+	vec3 SpecularColor = vec3(1.0);
 	for (uint i = 0u; i < DIRECTIONAL_LIGHTS; ++i)
 	{
 		vec3 L = GetDirectionalLightDirection(i);
@@ -362,29 +485,26 @@ void main()
 		float NdotH = saturate(dot(N, H));
 		float NdotL = saturate(dot(N, L));
 
-		float F90 = saturate(50.0 * F0.r);
-		vec3  F   = F_Schlick(F0, F90, LdotH);
-		float Vis = V_SmithGGXCorrelated(NdotV, NdotL, Roughness);
-		float D   = D_GGX(NdotH, Roughness);
-		vec3  Fr  = F * D * Vis;
+		FDirectLighting DirectionalLight = IntegrateBxDF(DiffuseColor, SpecularColor, Roughness, LdotH, NdotV, NdotL, NdotH);
 
-		float Fd = Fr_DisneyDiffuse(NdotV, NdotL, LdotH, Roughness);
-
-		vec3 DirectDiffuseColor = DiffuseColor * (vec3(1.0) - F) * Fd;
-		vec3 DirectSpecularColor = Fr;
-
-		// TODO : Add energy presevation (i.e. attenuation of the specular layer onto the diffuse component
-		// TODO : Add specular microfacet multiple scattering term (energy-conservation)
-
-		DirectLighting += ApplyDirectionalLight(i, N) * (DirectDiffuseColor + DirectSpecularColor);
+		DirectLighting += ApplyDirectionalLight(i, N) * (DirectionalLight.Diffuse + DirectionalLight.Specular) * ShadowFactor;
 	}
 	for (uint i = 0u; i < POINT_LIGHTS; ++i)
 	{
-		DirectLighting += ApplyPointLight(i, P, N);
+		vec3 L = GetPointLightDirection(i, P);
+		vec3 H = normalize(V + L);
+
+		float LdotH = saturate(dot(L, H));
+		float NdotH = saturate(dot(N, H));
+		float NdotL = saturate(dot(N, L));
+
+		FDirectLighting PointLight = IntegrateBxDF(DiffuseColor, SpecularColor, Roughness, LdotH, NdotV, NdotL, NdotH);
+
+		DirectLighting += ApplyPointLight(i, P, N) * (PointLight.Diffuse + PointLight.Specular);
 	}
 
 	// (2) Indirect Lighting : Simple lambert diffuse as indirect lighting
-	vec3 IndirectLighting = BaseColor.rgb / PI * AO;
+	vec3 IndirectLighting = DiffuseColor / PI * AO * 0.3 * ShadowFactor;
 
 	// (3) Reflection Specular : Image based lighting
 	vec3 ReflectionSpec = ComputeF0(0.5, BaseColor, Metallic);
@@ -397,19 +517,7 @@ void main()
 	float Reflection_V = GetSpecularOcclusion(NdotV, Roughness * Roughness, AO);
 	vec3 ReflectionColor = Reflection_L * Reflection_V * ReflectionBRDF;
 
-	float ShadowFactor = 1.0;
-	if (SPEC_CONSTANTS == 8)
-	{
-		vec4 ShadowCoord = ComputeShadowCoord(P);
-		ShadowFactor = ShadowDepthProject(ShadowCoord / ShadowCoord.w, vec2(0.0));
-	}
-	if (SPEC_CONSTANTS == 0 || SPEC_CONSTANTS == 9)
-	{
-		vec4 ShadowCoord = ComputeShadowCoord(P);
-		ShadowFactor = ComputePCF(ShadowCoord / ShadowCoord.w, 2);
-	}
-
-	vec3 FinalColor = DirectLighting + IndirectLighting * 0.3 + ReflectionColor;
+	vec3 FinalColor = DirectLighting + IndirectLighting + ReflectionColor;
 	FinalColor *= Mask;
 
 	// Gamma correct
@@ -417,9 +525,9 @@ void main()
 
 	switch (SPEC_CONSTANTS) {
 		case 0:
-			outColor = vec4(FinalColor * ShadowFactor, 1.0); break;
+			outColor = vec4(FinalColor, 1.0); break;
 		case 1:
-			outColor = vec4(vec3(BaseColor), 1.0); break;
+			outColor = vec4(vec3(pow(BaseColor, vec3(0.4545))), 1.0); break;
 		case 2:
 			outColor = vec4(vec3(Metallic), 1.0); break;
 		case 3:
@@ -431,10 +539,11 @@ void main()
 		case 6:
 			outColor = vec4(vec3(VertexColor), 1.0); break;
 		case 7:
-			outColor = vec4(vec3(P), 1.0); break;
+			outColor = vec4(ReflectionColor, 1.0); break;
 		case 8:
-		case 9:
 			outColor = vec4(vec3(ShadowFactor), 1.0); break;
+		case 9:
+			outColor = vec4(GBufferVis(FinalColor * ShadowFactor), 1.0); break;
 		default:
 			outColor = vec4(FinalColor * ShadowFactor, 1.0); break;
 	};

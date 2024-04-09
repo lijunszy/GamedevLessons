@@ -286,8 +286,8 @@ public:
         glfwSetWindowUserPointer(window, this);
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
         GLFWimage iconImages[2];
-        iconImages[0].pixels = stbi_load("Resources/Textures/vulkan_renderer.png", &iconImages[0].width, &iconImages[0].height, 0, STBI_rgb_alpha);
-        iconImages[1].pixels = stbi_load("Resources/Textures/vulkan_renderer_small.png", &iconImages[1].width, &iconImages[1].height, 0, STBI_rgb_alpha);
+        iconImages[0].pixels = stbi_load("Resources/Appicons/vulkan_renderer.png", &iconImages[0].width, &iconImages[0].height, 0, STBI_rgb_alpha);
+        iconImages[1].pixels = stbi_load("Resources/Appicons/vulkan_renderer_small.png", &iconImages[1].width, &iconImages[1].height, 0, STBI_rgb_alpha);
         glfwSetWindowIcon(window, 2, iconImages);
         stbi_image_free(iconImages[0].pixels);
         stbi_image_free(iconImages[1].pixels);
