@@ -2627,7 +2627,7 @@ protected:
 
 		FRenderObject rock01;
 		float rock01_zone = 1.0f;
-		std::string rock01_obj = "Resources/Models/rock-01.obj";
+		std::string rock01_obj = "Resources/Models/rock_01.obj";
 		std::vector<std::string> rock01_imgs = {
 				"Resources/Textures/rock_01_bc.png",		// BaseColor
 				"Resources/Textures/default_black.png",		// Metallic
@@ -2638,7 +2638,7 @@ protected:
 				"Resources/Textures/default_white.png" };	// Mask
 
 		FRenderInstancedObject rock02;
-		std::string rock02_obj = "Resources/Models/rock-02.obj";
+		std::string rock02_obj = "Resources/Models/rock_02.obj";
 		std::vector<std::string> rock02_imgs = {
 				"Resources/Textures/rock_02_bc.png",			// BaseColor
 				"Resources/Textures/default_black.png",		// Metallic
@@ -2665,9 +2665,9 @@ protected:
 		}
 
 		FRenderInstancedObject grass01;
-		std::string grass01_obj = "Resources/Models/grass-01.obj";
+		std::string grass01_obj = "Resources/Models/grass_01.obj";
 		FRenderInstancedObject grass02;
-		std::string grass02_obj = "Resources/Models/grass-01.obj";
+		std::string grass02_obj = "Resources/Models/grass_02.obj";
 		std::vector<std::string> grass_imgs = {
 				"Resources/Textures/grass_bc.png",			// BaseColor
 				"Resources/Textures/default_black.png",		// Metallic
